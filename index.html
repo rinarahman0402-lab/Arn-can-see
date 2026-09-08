@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARN CAN SEE</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+        body {
+            background-color: #050505;
+            color: #ffffff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.9);
+            border: 2px solid #222;
+        }
+        canvas {
+            background-color: #0a0a0c;
+            display: block;
+        }
+        #cutscene-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+            box-sizing: border-box;
+            z-index: 10;
+        }
+        .typed-text {
+            font-size: 24px;
+            line-height: 1.6;
+            color: #00ff66;
+            text-shadow: 0 0 8px rgba(0, 255, 102, 0.4);
+            max-width: 800px;
+            text-align: center;
+            white-space: pre-wrap;
+        }
+        .instruction {
+            margin-top: 30px;
+            font-size: 14px;
+            color: #888888;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.3; }
+            50% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
+        .hidden {
+            display: none !important;
+        }
+        #ui-bar {
+            margin-top: 10px;
+            font-size: 16px;
+            color: #aaa;
+            display: flex;
+            gap: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="800"></canvas>
+        <div id="cutscene-screen">
+            <div id="typed-text" class="typed-text"></div>
+            <div id="instruction" class="instruction hidden">Press SPACE or Click to Continue</div>
+        </div>
+    </div>
+    
+    <div id="ui-bar">
+        <span id="level-display">Level: 1/8</span>
+        <span id="objective-display">Objective: Collect Batteries</span>
+        <span id="controls-hint">Controls: WASD / Arrow Keys</span>
+    </div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const cutsceneScreen = document.getElementById('cutscene-screen');
+const typedTextEl = document.getElementById('typed-text');
+const instructionEl = document.getElementById('instruction');
+const levelDisplay = document.getElementById('level-display');
+const objectiveDisplay = document.getElementById('objective-display');
+
+// Level logs / lore typed out
+const LEVEL_TEXTS = {
+    1: "Level 1 out of 8\n\narn can see.",
+    2: "Level 2 out of 8\n\narn can walk.",
+    3: "Level 3 out of 8\n\narn can run.",
+    4: "Level 4 out of 8\n\narn can sense heartbeat.",
+    5: "Level 5 out of 8\n\narn can lay traps.",
+    6: "Level 6 out of 8\n\narn can teleport.",
+    7: "Level 7 out of 8\n\narn can duplicate.",
+    8: "Level 8 out of 8\n\narn can see... and arn can die.\n\nGather 8 logs of wood to build a giant campfire in the center elevator, then lure Arn around it.",
+    9: "VICTORY\n\nArn step into the flames.\n\nGoodbye, arn."
+};
+
+const GRID_SIZE = 25;
+const TILE_SIZE = 32; // 25 * 32 = 800px canvas
+let currentLevel = 1;
+let gameState = 'CUTSCENE'; // CUTSCENE, PLAYING, GAMEOVER
+let grid = [];
+let keys = {};
+
+// Entities
+let player = { x: 0, y: 0, vx: 0, vy: 0, speed: 2.5, radius: 10 };
+let arns = [];
+let batteries = [];
+let woods = [];
+let traps = [];
+let campfire = null;
+let campfireLit = false;
+
+// Input listeners
+window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if ((gameState === 'CUTSCENE' || gameState === 'GAMEOVER') && instructionEl.classList.contains('hidden') === false) {
+        if (e.code === 'Space' || e.code === 'Enter') {
+            advanceState();
+        }
+    }
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+cutsceneScreen.addEventListener('click', () => {
+    if ((gameState === 'CUTSCENE' || gameState === 'GAMEOVER') && instructionEl.classList.contains('hidden') === false) {
+        advanceState();
+    }
+});
+
+// Typewriter Effect
+let typingInterval = null;
+function playCutscene(text, callback) {
+    gameState = 'CUTSCENE';
+    cutsceneScreen.classList.remove('hidden');
+    instructionEl.classList.add('hidden');
+    typedTextEl.textContent = '';
+    
+    let index = 0;
+    clearInterval(typingInterval);
+    
+    typingInterval = setInterval(() => {
+        typedTextEl.textContent += text[index];
+        index++;
+        if (index >= text.length) {
+            clearInterval(typingInterval);
+            instructionEl.classList.remove('hidden');
+        }
+    }, 45);
+}
+
+function advanceState() {
+    if (currentLevel > 8) {
+        currentLevel = 1;
+    }
+    cutsceneScreen.classList.add('hidden');
+    startLevel(currentLevel);
+}
+
+// Simple Labyrinth Maze Generation (DFS)
+function generateLabyrinth() {
+    grid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(1)); // 1 = Wall, 0 = Path
+
+    function carve(x, y) {
+        grid[y][x] = 0;
+        const dirs = [
+            [0, -2], [0, 2], [-2, 0], [2, 0]
+        ].sort(() => Math.random() - 0.5);
+
+        for (let [dx, dy] of dirs) {
+            let nx = x + dx, ny = y + dy;
+            if (nx > 0 && nx < GRID_SIZE - 1 && ny > 0 && ny < GRID_SIZE - 1 && grid[ny][nx] === 1) {
+                grid[y + dy / 2][x + dx / 2] = 0;
+                carve(nx, ny);
+            }
+        }
+    }
+
+    carve(1, 1);
+
+    // Clear Center Elevator Room (3x3 area at center)
+    const mid = Math.floor(GRID_SIZE / 2);
+    for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+            grid[mid + dy][mid + dx] = 0;
+        }
+    }
+}
+
+function startLevel(lvl) {
+    currentLevel = lvl;
+    levelDisplay.textContent = `Level: ${currentLevel}/8`;
+    
+    generateLabyrinth();
+
+    // Spawn Player at elevator center
+    const centerPx = (Math.floor(GRID_SIZE / 2) + 0.5) * TILE_SIZE;
+    player.x = centerPx;
+    player.y = centerPx;
+
+    batteries = [];
+    woods = [];
+    arns = [];
+    traps = [];
+    campfire = null;
+    campfireLit = false;
+
+    // Spawn Items
+    if (lvl < 8) {
+        objectiveDisplay.textContent = `Objective: Collect ${lvl} Battery/Batteries`;
+        for (let i = 0; i < lvl; i++) {
+            let pos = getRandomEmptyTile();
+            batteries.push({ x: (pos.x + 0.5) * TILE_SIZE, y: (pos.y + 0.5) * TILE_SIZE, collected: false });
+        }
+    } else {
+        objectiveDisplay.textContent = `Objective: Collect 8 Wood Pieces`;
+        for (let i = 0; i < 8; i++) {
+            let pos = getRandomEmptyTile();
+            woods.push({ x: (pos.x + 0.5) * TILE_SIZE, y: (pos.y + 0.5) * TILE_SIZE, collected: false });
+        }
+    }
+
+    // Spawn Arn
+    const numArns = (lvl === 7 || lvl === 8) ? 2 : 1;
+    for (let i = 0; i < numArns; i++) {
+        let pos = getRandomEmptyTile(true); // Away from center
+        arns.push({
+            x: (pos.x + 0.5) * TILE_SIZE,
+            y: (pos.y + 0.5) * TILE_SIZE,
+            vx: 0,
+            vy: 0,
+            angle: Math.random() * Math.PI * 2,
+            state: 'PATROL',
+            speed: lvl === 1 ? 0 : (lvl === 2 ? 1.0 : (lvl >= 3 ? 2.2 : 1.8)),
+            trapCooldown: 0,
+            teleportCooldown: 0
+        });
+    }
+
+    gameState = 'PLAYING';
+}
+
+function getRandomEmptyTile(awayFromCenter = false) {
+    const mid = Math.floor(GRID_SIZE / 2);
+    while (true) {
+        let x = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
+        let y = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
+        if (grid[y][x] === 0) {
+            if (awayFromCenter && Math.abs(x - mid) < 4 && Math.abs(y - mid) < 4) continue;
+            return { x, y };
+        }
+    }
+}
+
+// Check line of sight
+function canSeePlayer(arn) {
+    let dx = player.x - arn.x;
+    let dy = player.y - arn.y;
+    let dist = Math.hypot(dx, dy);
+    
+    // Level 4: Sense Heartbeat (Sees player through walls if close)
+    if (currentLevel >= 4 && dist < 200) return true;
+
+    // Raycast check for walls
+    let steps = Math.ceil(dist / (TILE_SIZE / 2));
+    for (let i = 0; i <= steps; i++) {
+        let checkX = arn.x + (dx * (i / steps));
+        let checkY = arn.y + (dy * (i / steps));
+        let tileX = Math.floor(checkX / TILE_SIZE);
+        let tileY = Math.floor(checkY / TILE_SIZE);
+        if (grid[tileY] && grid[tileY][tileX] === 1) return false;
+    }
+    return true;
+}
+
+function update() {
+    if (gameState !== 'PLAYING') return;
+
+    // Player Movement
+    let dx = 0, dy = 0;
+    if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
+    if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
+    if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
+    if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
+
+    if (dx !== 0 && dy !== 0) {
+        dx *= 0.7071;
+        dy *= 0.7071;
+    }
+
+    moveWithCollision(player, dx * player.speed, dy * player.speed);
+
+    // Trap interactions (Level 5+)
+    for (let i = traps.length - 1; i >= 0; i--) {
+        let t = traps[i];
+        if (Math.hypot(player.x - t.x, player.y - t.y) < player.radius + 8) {
+            // Player stepped on trap - slow down temporarily
+            player.speed = 1.0;
+            setTimeout(() => { player.speed = 2.5; }, 2000);
+            traps.splice(i, 1);
+        }
+    }
+
+    // Item Collection
+    if (currentLevel < 8) {
+        batteries.forEach(b => {
+            if (!b.collected && Math.hypot(player.x - b.x, player.y - b.y) < player.radius + 12) {
+                b.collected = true;
+            }
+        });
+
+        // Check level clear
+        let remaining = batteries.filter(b => !b.collected).length;
+        if (remaining === 0) {
+            // Check if player reaches middle elevator
+            const midPx = (Math.floor(GRID_SIZE / 2) + 0.5) * TILE_SIZE;
+            if (Math.hypot(player.x - midPx, player.y - midPx) < 40) {
+                currentLevel++;
+                playCutscene(LEVEL_TEXTS[currentLevel]);
+            }
+        }
+    } else {
+        // Level 8 Wood collection & Campfire setup
+        woods.forEach(w => {
+            if (!w.collected && Math.hypot(player.x - w.x, player.y - w.y) < player.radius + 12) {
+                w.collected = true;
+            }
+        });
+
+        let woodsLeft = woods.filter(w => !w.collected).length;
+        if (woodsLeft === 0 && !campfire) {
+            const midPx = (Math.floor(GRID_SIZE / 2) + 0.5) * TILE_SIZE;
+            campfire = { x: midPx, y: midPx };
+            objectiveDisplay.textContent = "Lure Arn around the Campfire!";
+        }
+
+        if (campfire) {
+            arns.forEach(arn => {
+                let distToFire = Math.hypot(arn.x - campfire.x, arn.y - campfire.y);
+                if (distToFire < 50) {
+                    // Arn Burns and Dies!
+                    currentLevel = 9;
+                    playCutscene(LEVEL_TEXTS[9]);
+                }
+            });
+        }
+    }
+
+    // Arn Behavior Logic
+    arns.forEach(arn => {
+        let seesPlayer = canSeePlayer(arn);
+
+        // Level 1: Arn can only see player, no moving/chasing
+        if (currentLevel === 1) {
+            if (seesPlayer) {
+                arn.angle = Math.atan2(player.y - arn.y, player.x - arn.x);
+            }
+            return;
+        }
+
+        // Level 6+: Teleportation ability
+        if (currentLevel >= 6) {
+            arn.teleportCooldown++;
+            if (arn.teleportCooldown > 400) {
+                arn.teleportCooldown = 0;
+                let nearTile = getRandomEmptyTile();
+                arn.x = (nearTile.x + 0.5) * TILE_SIZE;
+                arn.y = (nearTile.y + 0.5) * TILE_SIZE;
+            }
+        }
+
+        // Level 5+: Lay Traps ability
+        if (currentLevel >= 5 && seesPlayer) {
+            arn.trapCooldown++;
+            if (arn.trapCooldown > 250) {
+                arn.trapCooldown = 0;
+                traps.push({ x: arn.x, y: arn.y });
+            }
+        }
+
+        // AI Chasing / Patrol
+        if (seesPlayer) {
+            arn.angle = Math.atan2(player.y - arn.y, player.x - arn.x);
+            let moveX = Math.cos(arn.angle) * arn.speed;
+            let moveY = Math.sin(arn.angle) * arn.speed;
+            moveWithCollision(arn, moveX, moveY);
+        } else {
+            // Random movement
+            if (Math.random() < 0.02) arn.angle += (Math.random() - 0.5) * 2;
+            let moveX = Math.cos(arn.angle) * (arn.speed * 0.5);
+            let moveY = Math.sin(arn.angle) * (arn.speed * 0.5);
+            moveWithCollision(arn, moveX, moveY);
+        }
+
+        // Collision with player (Levels 2+)
+        if (currentLevel >= 2) {
+            if (Math.hypot(player.x - arn.x, player.y - arn.y) < player.radius + 14) {
+                // Game Over - Restart Level
+                playCutscene(`arn caught you...\n\nRestarting Level ${currentLevel}...`);
+            }
+        }
+    });
+}
+
+function moveWithCollision(entity, vx, vy) {
+    let nextX = entity.x + vx;
+    let nextY = entity.y + vy;
+    let r = 10;
+
+    // Check X Movement
+    let tileX = Math.floor((nextX + Math.sign(vx) * r) / TILE_SIZE);
+    let currentTileY = Math.floor(entity.y / TILE_SIZE);
+    if (grid[currentTileY] && grid[currentTileY][tileX] === 0) {
+        entity.x = nextX;
+    }
+
+    // Check Y Movement
+    let tileY = Math.floor((nextY + Math.sign(vy) * r) / TILE_SIZE);
+    let currentTileX = Math.floor(entity.x / TILE_SIZE);
+    if (grid[tileY] && grid[tileY][currentTileX] === 0) {
+        entity.y = nextY;
+    }
+}
+
+function render() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw Labyrinth
+    const mid = Math.floor(GRID_SIZE / 2);
+    for (let r = 0; r < GRID_SIZE; r++) {
+        for (let c = 0; c < GRID_SIZE; c++) {
+            if (grid[r][c] === 1) {
+                ctx.fillStyle = '#1c1d24';
+                ctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                ctx.strokeStyle = '#0f1015';
+                ctx.strokeRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            } else {
+                // Center Elevator Floor
+                if (Math.abs(r - mid) <= 1 && Math.abs(c - mid) <= 1) {
+                    ctx.fillStyle = '#2a2215';
+                } else {
+                    ctx.fillStyle = '#08080a';
+                }
+                ctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            }
+        }
+    }
+
+    // Draw Elevator outline
+    ctx.strokeStyle = '#ffaa00';
+    ctx.lineWidth = 2;
+    ctx.strokeRect((mid - 1) * TILE_SIZE, (mid - 1) * TILE_SIZE, TILE_SIZE * 3, TILE_SIZE * 3);
+
+    // Draw Traps
+    traps.forEach(t => {
+        ctx.fillStyle = '#ff0055';
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    // Draw Campfire (Level 8)
+    if (campfire) {
+        ctx.fillStyle = '#ff6600';
+        ctx.beginPath();
+        ctx.arc(campfire.x, campfire.y, 25, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffff00';
+        ctx.beginPath();
+        ctx.arc(campfire.x, campfire.y, 12, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Draw Items
+    batteries.forEach(b => {
+        if (!b.collected) {
+            ctx.fillStyle = '#00e5ff';
+            ctx.fillRect(b.x - 6, b.y - 10, 12, 20);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(b.x - 3, b.y - 13, 6, 3);
+        }
+    });
+
+    woods.forEach(w => {
+        if (!w.collected) {
+            ctx.fillStyle = '#8b5a2b';
+            ctx.fillRect(w.x - 8, w.y - 4, 16, 8);
+        }
+    });
+
+    // Draw Player
+    ctx.fillStyle = '#00ff88';
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Draw Arn (Eye with Spider Legs)
+    arns.forEach(arn => {
+        drawArn(arn);
+    });
+}
+
+function drawArn(arn) {
+    ctx.save();
+    ctx.translate(arn.x, arn.y);
+
+    // Draw Spider Legs
+    ctx.strokeStyle = '#dd0000';
+    ctx.lineWidth = 3;
+    let time = Date.now() * 0.01;
+    for (let i = 0; i < 8; i++) {
+        let legAngle = (i / 8) * Math.PI * 2 + Math.sin(time + i) * 0.2;
+        let legX = Math.cos(legAngle) * 22;
+        let legY = Math.sin(legAngle) * 22;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(legX, legY);
+        ctx.stroke();
+    }
+
+    // Draw Eyeball Body
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(0, 0, 12, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pupil pointing toward angle
+    let pupilX = Math.cos(arn.angle) * 5;
+    let pupilY = Math.sin(arn.angle) * 5;
+
+    ctx.fillStyle = '#ff0000';
+    ctx.beginPath();
+    ctx.arc(pupilX, pupilY, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#000000';
+    ctx.beginPath();
+    ctx.arc(pupilX, pupilY, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+}
+
+function loop() {
+    update();
+    render();
+    requestAnimationFrame(loop);
+}
+
+// Start Game Initialization
+playCutscene(LEVEL_TEXTS[1]);
+loop();
+
+</script>
+</body>
+</html>
