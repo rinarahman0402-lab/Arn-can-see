@@ -14,44 +14,39 @@
             touch-action: manipulation;
         }
         body {
-            background-color: #050505;
+            background-color: #000000;
             color: #ffffff;
-            font-family: Arial, sans-serif;
+            font-family: monospace, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            overflow: hidden;
-            width: 100vw;
+            justify-content: space-between;
             height: 100vh;
+            width: 100vw;
+            overflow: hidden;
         }
         #ui-bar {
             width: 100%;
-            max-width: 600px;
-            padding: 8px;
+            padding: 10px;
             font-size: 14px;
-            color: #aaa;
+            color: #00ff88;
             display: flex;
             justify-content: space-between;
             background: #111;
-            border-bottom: 1px solid #333;
+            border-bottom: 2px solid #333;
         }
         #game-container {
             position: relative;
-            width: 100vw;
-            height: 60vh;
-            max-width: 600px;
-            max-height: 600px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background-color: #0a0a0c;
+            width: 95vw;
+            height: 95vw;
+            max-width: 450px;
+            max-height: 450px;
+            background-color: #111115;
+            border: 2px solid #333;
         }
         canvas {
             width: 100%;
             height: 100%;
-            object-fit: contain;
             display: block;
         }
         #cutscene-screen {
@@ -60,37 +55,31 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: #000000;
+            background-color: rgba(0, 0, 0, 0.95);
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            padding: 20px;
+            padding: 15px;
             z-index: 10;
-        }
-        .typed-text {
-            font-size: 18px;
-            line-height: 1.5;
-            color: #00ff66;
-            text-shadow: 0 0 8px rgba(0, 255, 102, 0.4);
             text-align: center;
+        }
+        #typed-text {
+            font-size: 18px;
+            line-height: 1.4;
+            color: #00ff66;
+            margin-bottom: 20px;
             white-space: pre-wrap;
-            word-wrap: break-word;
         }
-        .instruction {
-            margin-top: 20px;
-            font-size: 14px;
-            color: #ffffff;
-            background: #222;
-            padding: 8px 16px;
-            border-radius: 4px;
-            animation: pulse 1.5s infinite;
+        #start-btn {
+            background-color: #00ff88;
+            color: #000;
+            font-weight: bold;
+            font-size: 16px;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
             cursor: pointer;
-        }
-        @keyframes pulse {
-            0% { opacity: 0.5; }
-            50% { opacity: 1; }
-            100% { opacity: 0.5; }
         }
         .hidden {
             display: none !important;
@@ -99,25 +88,24 @@
         /* Mobile Touch Controls */
         #touch-controls {
             width: 100%;
-            max-width: 400px;
-            height: 25vh;
+            max-width: 320px;
+            height: 180px;
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             grid-template-rows: repeat(3, 1fr);
-            gap: 5px;
+            gap: 8px;
             padding: 10px;
-            box-sizing: border-box;
+            margin-bottom: 10px;
         }
         .btn {
             background-color: #22222a;
-            border: 2px solid #444;
+            border: 2px solid #555;
             color: #fff;
-            font-size: 20px;
-            border-radius: 8px;
+            font-size: 24px;
+            border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
-            active-bg: #555;
         }
         .btn:active {
             background-color: #00ff88;
@@ -137,14 +125,13 @@
     </div>
 
     <div id="game-container">
-        <canvas id="gameCanvas" width="800" height="800"></canvas>
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
         <div id="cutscene-screen">
-            <div id="typed-text" class="typed-text"></div>
-            <div id="instruction" class="instruction hidden">TAP HERE TO START</div>
+            <div id="typed-text">Level 1 out of 8&#10;&#10;arn can see.</div>
+            <button id="start-btn">TAP TO PLAY</button>
         </div>
     </div>
     
-    <!-- D-Pad for Mobile -->
     <div id="touch-controls">
         <div class="btn" id="btn-up">▲</div>
         <div class="btn" id="btn-left">◄</div>
@@ -157,7 +144,7 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const cutsceneScreen = document.getElementById('cutscene-screen');
 const typedTextEl = document.getElementById('typed-text');
-const instructionEl = document.getElementById('instruction');
+const startBtn = document.getElementById('start-btn');
 const levelDisplay = document.getElementById('level-display');
 const objectiveDisplay = document.getElementById('objective-display');
 
@@ -169,74 +156,50 @@ const LEVEL_TEXTS = {
     5: "Level 5 out of 8\n\narn can lay traps.",
     6: "Level 6 out of 8\n\narn can teleport.",
     7: "Level 7 out of 8\n\narn can duplicate.",
-    8: "Level 8 out of 8\n\narn can see... and arn can die.\n\nGather 8 logs of wood to build a giant campfire in the center elevator, then lure Arn around it.",
-    9: "VICTORY\n\nArn step into the flames.\n\nGoodbye, arn."
+    8: "Level 8 out of 8\n\narn can see... and arn can die.\n\nGather 8 pieces of wood to build a giant campfire in the center, then lure Arn into it.",
+    9: "VICTORY!\n\nArn stepped into the flames.\n\nGoodbye, arn."
 };
 
-const GRID_SIZE = 25;
-const TILE_SIZE = 32;
+const GRID_SIZE = 15;
+const TILE_SIZE = 400 / GRID_SIZE; // Fits perfectly into 400px canvas
 let currentLevel = 1;
 let gameState = 'CUTSCENE';
 let grid = [];
 let keys = {};
 
-let player = { x: 0, y: 0, vx: 0, vy: 0, speed: 3, radius: 10 };
+let player = { x: 0, y: 0, speed: 2.5, radius: 8 };
 let arns = [];
 let batteries = [];
 let woods = [];
 let traps = [];
 let campfire = null;
 
-// Touch Control State
 let touchDirs = { up: false, down: false, left: false, right: false };
 
-function setupTouchBtn(id, dir) {
-    const btn = document.getElementById(id);
-    const start = (e) => { e.preventDefault(); touchDirs[dir] = true; };
-    const end = (e) => { e.preventDefault(); touchDirs[dir] = false; };
-    btn.addEventListener('touchstart', start);
-    btn.addEventListener('touchend', end);
-    btn.addEventListener('mousedown', start);
-    btn.addEventListener('mouseup', end);
+function bindTouch(id, dir) {
+    const el = document.getElementById(id);
+    const press = (e) => { e.preventDefault(); touchDirs[dir] = true; };
+    const release = (e) => { e.preventDefault(); touchDirs[dir] = false; };
+    el.addEventListener('touchstart', press);
+    el.addEventListener('touchend', release);
+    el.addEventListener('mousedown', press);
+    el.addEventListener('mouseup', release);
 }
-setupTouchBtn('btn-up', 'up');
-setupTouchBtn('btn-down', 'down');
-setupTouchBtn('btn-left', 'left');
-setupTouchBtn('btn-right', 'right');
+bindTouch('btn-up', 'up');
+bindTouch('btn-down', 'down');
+bindTouch('btn-left', 'left');
+bindTouch('btn-right', 'right');
 
 window.addEventListener('keydown', e => { keys[e.code] = true; });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
 
-cutsceneScreen.addEventListener('click', () => {
-    if (gameState === 'CUTSCENE' && !instructionEl.classList.contains('hidden')) {
-        advanceState();
-    }
-});
-cutsceneScreen.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    if (gameState === 'CUTSCENE' && !instructionEl.classList.contains('hidden')) {
-        advanceState();
-    }
-});
+startBtn.addEventListener('click', advanceState);
+startBtn.addEventListener('touchstart', (e) => { e.preventDefault(); advanceState(); });
 
-let typingInterval = null;
 function playCutscene(text) {
     gameState = 'CUTSCENE';
+    typedTextEl.textContent = text;
     cutsceneScreen.classList.remove('hidden');
-    instructionEl.classList.add('hidden');
-    typedTextEl.textContent = '';
-    
-    let index = 0;
-    clearInterval(typingInterval);
-    
-    typingInterval = setInterval(() => {
-        typedTextEl.textContent += text[index];
-        index++;
-        if (index >= text.length) {
-            clearInterval(typingInterval);
-            instructionEl.classList.remove('hidden');
-        }
-    }, 35);
 }
 
 function advanceState() {
@@ -248,20 +211,16 @@ function advanceState() {
 function generateLabyrinth() {
     grid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(1));
 
-    function carve(x, y) {
-        grid[y][x] = 0;
-        const dirs = [[0, -2], [0, 2], [-2, 0], [2, 0]].sort(() => Math.random() - 0.5);
-
-        for (let [dx, dy] of dirs) {
-            let nx = x + dx, ny = y + dy;
-            if (nx > 0 && nx < GRID_SIZE - 1 && ny > 0 && ny < GRID_SIZE - 1 && grid[ny][nx] === 1) {
-                grid[y + dy / 2][x + dx / 2] = 0;
-                carve(nx, ny);
+    // Simple grid layout to guarantee path stability on mobile
+    for (let r = 1; r < GRID_SIZE - 1; r++) {
+        for (let c = 1; c < GRID_SIZE - 1; c++) {
+            if (r % 2 !== 0 || c % 2 !== 0) {
+                grid[r][c] = 0;
             }
         }
     }
-    carve(1, 1);
 
+    // Elevator Room at Center
     const mid = Math.floor(GRID_SIZE / 2);
     for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
@@ -287,13 +246,13 @@ function startLevel(lvl) {
     campfire = null;
 
     if (lvl < 8) {
-        objectiveDisplay.textContent = `Objective: Collect ${lvl} Battery/Batteries`;
+        objectiveDisplay.textContent = `Objective: Collect ${lvl} Battery`;
         for (let i = 0; i < lvl; i++) {
             let pos = getRandomEmptyTile();
             batteries.push({ x: (pos.x + 0.5) * TILE_SIZE, y: (pos.y + 0.5) * TILE_SIZE, collected: false });
         }
     } else {
-        objectiveDisplay.textContent = `Objective: Collect 8 Wood Pieces`;
+        objectiveDisplay.textContent = `Objective: Collect 8 Wood Logs`;
         for (let i = 0; i < 8; i++) {
             let pos = getRandomEmptyTile();
             woods.push({ x: (pos.x + 0.5) * TILE_SIZE, y: (pos.y + 0.5) * TILE_SIZE, collected: false });
@@ -306,8 +265,8 @@ function startLevel(lvl) {
         arns.push({
             x: (pos.x + 0.5) * TILE_SIZE,
             y: (pos.y + 0.5) * TILE_SIZE,
-            angle: Math.random() * Math.PI * 2,
-            speed: lvl === 1 ? 0 : (lvl === 2 ? 1.2 : (lvl >= 3 ? 2.3 : 1.8)),
+            angle: 0,
+            speed: lvl === 1 ? 0 : (lvl === 2 ? 0.8 : (lvl >= 3 ? 1.8 : 1.4)),
             trapCooldown: 0,
             teleportCooldown: 0
         });
@@ -322,28 +281,10 @@ function getRandomEmptyTile(awayFromCenter = false) {
         let x = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
         let y = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
         if (grid[y][x] === 0) {
-            if (awayFromCenter && Math.abs(x - mid) < 4 && Math.abs(y - mid) < 4) continue;
+            if (awayFromCenter && Math.abs(x - mid) < 3 && Math.abs(y - mid) < 3) continue;
             return { x, y };
         }
     }
-}
-
-function canSeePlayer(arn) {
-    let dx = player.x - arn.x;
-    let dy = player.y - arn.y;
-    let dist = Math.hypot(dx, dy);
-    
-    if (currentLevel >= 4 && dist < 200) return true;
-
-    let steps = Math.ceil(dist / (TILE_SIZE / 2));
-    for (let i = 0; i <= steps; i++) {
-        let checkX = arn.x + (dx * (i / steps));
-        let checkY = arn.y + (dy * (i / steps));
-        let tileX = Math.floor(checkX / TILE_SIZE);
-        let tileY = Math.floor(checkY / TILE_SIZE);
-        if (grid[tileY] && grid[tileY][tileX] === 1) return false;
-    }
-    return true;
 }
 
 function update() {
@@ -365,17 +306,17 @@ function update() {
     // Traps
     for (let i = traps.length - 1; i >= 0; i--) {
         let t = traps[i];
-        if (Math.hypot(player.x - t.x, player.y - t.y) < player.radius + 8) {
-            player.speed = 1.2;
-            setTimeout(() => { player.speed = 3; }, 2000);
+        if (Math.hypot(player.x - t.x, player.y - t.y) < player.radius + 6) {
+            player.speed = 1.0;
+            setTimeout(() => { player.speed = 2.5; }, 1500);
             traps.splice(i, 1);
         }
     }
 
-    // Item Collection
+    // Items
     if (currentLevel < 8) {
         batteries.forEach(b => {
-            if (!b.collected && Math.hypot(player.x - b.x, player.y - b.y) < player.radius + 12) {
+            if (!b.collected && Math.hypot(player.x - b.x, player.y - b.y) < player.radius + 10) {
                 b.collected = true;
             }
         });
@@ -383,14 +324,14 @@ function update() {
         let remaining = batteries.filter(b => !b.collected).length;
         if (remaining === 0) {
             const midPx = (Math.floor(GRID_SIZE / 2) + 0.5) * TILE_SIZE;
-            if (Math.hypot(player.x - midPx, player.y - midPx) < 40) {
+            if (Math.hypot(player.x - midPx, player.y - midPx) < 30) {
                 currentLevel++;
                 playCutscene(LEVEL_TEXTS[currentLevel]);
             }
         }
     } else {
         woods.forEach(w => {
-            if (!w.collected && Math.hypot(player.x - w.x, player.y - w.y) < player.radius + 12) {
+            if (!w.collected && Math.hypot(player.x - w.x, player.y - w.y) < player.radius + 10) {
                 w.collected = true;
             }
         });
@@ -399,13 +340,12 @@ function update() {
         if (woodsLeft === 0 && !campfire) {
             const midPx = (Math.floor(GRID_SIZE / 2) + 0.5) * TILE_SIZE;
             campfire = { x: midPx, y: midPx };
-            objectiveDisplay.textContent = "Lure Arn into the Campfire!";
+            objectiveDisplay.textContent = "Lure Arn into Campfire!";
         }
 
         if (campfire) {
             arns.forEach(arn => {
-                let distToFire = Math.hypot(arn.x - campfire.x, arn.y - campfire.y);
-                if (distToFire < 45) {
+                if (Math.hypot(arn.x - campfire.x, arn.y - campfire.y) < 35) {
                     currentLevel = 9;
                     playCutscene(LEVEL_TEXTS[9]);
                 }
@@ -415,16 +355,16 @@ function update() {
 
     // Arn AI
     arns.forEach(arn => {
-        let seesPlayer = canSeePlayer(arn);
+        let seesPlayer = true; // Simplified line-of-sight for stability
 
         if (currentLevel === 1) {
-            if (seesPlayer) arn.angle = Math.atan2(player.y - arn.y, player.x - arn.x);
+            arn.angle = Math.atan2(player.y - arn.y, player.x - arn.x);
             return;
         }
 
         if (currentLevel >= 6) {
             arn.teleportCooldown++;
-            if (arn.teleportCooldown > 400) {
+            if (arn.teleportCooldown > 350) {
                 arn.teleportCooldown = 0;
                 let nearTile = getRandomEmptyTile();
                 arn.x = (nearTile.x + 0.5) * TILE_SIZE;
@@ -432,28 +372,21 @@ function update() {
             }
         }
 
-        if (currentLevel >= 5 && seesPlayer) {
+        if (currentLevel >= 5) {
             arn.trapCooldown++;
-            if (arn.trapCooldown > 250) {
+            if (arn.trapCooldown > 200) {
                 arn.trapCooldown = 0;
                 traps.push({ x: arn.x, y: arn.y });
             }
         }
 
-        if (seesPlayer) {
-            arn.angle = Math.atan2(player.y - arn.y, player.x - arn.x);
-            let moveX = Math.cos(arn.angle) * arn.speed;
-            let moveY = Math.sin(arn.angle) * arn.speed;
-            moveWithCollision(arn, moveX, moveY);
-        } else {
-            if (Math.random() < 0.02) arn.angle += (Math.random() - 0.5) * 2;
-            let moveX = Math.cos(arn.angle) * (arn.speed * 0.5);
-            let moveY = Math.sin(arn.angle) * (arn.speed * 0.5);
-            moveWithCollision(arn, moveX, moveY);
-        }
+        arn.angle = Math.atan2(player.y - arn.y, player.x - arn.x);
+        let moveX = Math.cos(arn.angle) * arn.speed;
+        let moveY = Math.sin(arn.angle) * arn.speed;
+        moveWithCollision(arn, moveX, moveY);
 
         if (currentLevel >= 2) {
-            if (Math.hypot(player.x - arn.x, player.y - arn.y) < player.radius + 12) {
+            if (Math.hypot(player.x - arn.x, player.y - arn.y) < player.radius + 10) {
                 playCutscene(`arn caught you...\n\nRestarting Level ${currentLevel}...`);
             }
         }
@@ -463,7 +396,7 @@ function update() {
 function moveWithCollision(entity, vx, vy) {
     let nextX = entity.x + vx;
     let nextY = entity.y + vy;
-    let r = 8;
+    let r = 6;
 
     let tileX = Math.floor((nextX + Math.sign(vx) * r) / TILE_SIZE);
     let currentTileY = Math.floor(entity.y / TILE_SIZE);
@@ -501,40 +434,38 @@ function render() {
     traps.forEach(t => {
         ctx.fillStyle = '#ff0055';
         ctx.beginPath();
-        ctx.arc(t.x, t.y, 6, 0, Math.PI * 2);
+        ctx.arc(t.x, t.y, 4, 0, Math.PI * 2);
         ctx.fill();
     });
 
     if (campfire) {
         ctx.fillStyle = '#ff6600';
         ctx.beginPath();
-        ctx.arc(campfire.x, campfire.y, 25, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#ffff00';
-        ctx.beginPath();
-        ctx.arc(campfire.x, campfire.y, 12, 0, Math.PI * 2);
+        ctx.arc(campfire.x, campfire.y, 18, 0, Math.PI * 2);
         ctx.fill();
     }
 
     batteries.forEach(b => {
         if (!b.collected) {
             ctx.fillStyle = '#00e5ff';
-            ctx.fillRect(b.x - 6, b.y - 10, 12, 20);
+            ctx.fillRect(b.x - 4, b.y - 7, 8, 14);
         }
     });
 
     woods.forEach(w => {
         if (!w.collected) {
             ctx.fillStyle = '#8b5a2b';
-            ctx.fillRect(w.x - 8, w.y - 4, 16, 8);
+            ctx.fillRect(w.x - 6, w.y - 3, 12, 6);
         }
     });
 
+    // Player (Green Circle)
     ctx.fillStyle = '#00ff88';
     ctx.beginPath();
     ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
     ctx.fill();
 
+    // Arn
     arns.forEach(arn => {
         drawArn(arn);
     });
@@ -545,27 +476,26 @@ function drawArn(arn) {
     ctx.translate(arn.x, arn.y);
 
     ctx.strokeStyle = '#ff3333';
-    ctx.lineWidth = 3;
-    let time = Date.now() * 0.01;
+    ctx.lineWidth = 2;
     for (let i = 0; i < 8; i++) {
-        let legAngle = (i / 8) * Math.PI * 2 + Math.sin(time + i) * 0.2;
+        let legAngle = (i / 8) * Math.PI * 2;
         ctx.beginPath();
         ctx.moveTo(0, 0);
-        ctx.lineTo(Math.cos(legAngle) * 20, Math.sin(legAngle) * 20);
+        ctx.lineTo(Math.cos(legAngle) * 14, Math.sin(legAngle) * 14);
         ctx.stroke();
     }
 
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.arc(0, 0, 12, 0, Math.PI * 2);
+    ctx.arc(0, 0, 8, 0, Math.PI * 2);
     ctx.fill();
 
-    let pupilX = Math.cos(arn.angle) * 5;
-    let pupilY = Math.sin(arn.angle) * 5;
+    let pupilX = Math.cos(arn.angle) * 3;
+    let pupilY = Math.sin(arn.angle) * 3;
 
     ctx.fillStyle = '#ff0000';
     ctx.beginPath();
-    ctx.arc(pupilX, pupilY, 5, 0, Math.PI * 2);
+    ctx.arc(pupilX, pupilY, 3, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.restore();
@@ -577,7 +507,6 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
-playCutscene(LEVEL_TEXTS[1]);
 loop();
 </script>
 </body>
